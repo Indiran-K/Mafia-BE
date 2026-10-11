@@ -1,2 +1,31 @@
 # dependencies
 node_modules/
+
+# generated Prisma client — rebuilt by `npx prisma generate`
+/src/generated/prisma
+
+# local env files (secrets) — .env.example is the committed template
+.env
+.env*.local
+
+# tests (kept locally, not committed)
+__tests__/
+*.spec.ts
+*.test.ts
+vitest.config.ts
+
+# build output and tooling
+dist/
+build/
+coverage/
+*.tsbuildinfo
+
+# logs
+*.log
+npm-debug.log*
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

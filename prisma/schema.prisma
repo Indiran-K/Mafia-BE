@@ -1,0 +1,262 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id             String    @id @default(uuid())
+  userName       String
+  fullName       String?
+  mobileNumber   String
+  email          String?
+  avatarColor    String?
+  // Always 'PHONE' today. A UserAuthProvider table replaces this when social
+  // login lands; until then nothing may branch on its value.
+  loggedInMethod String    @default("PHONE")
+  lastLoggedIn   DateTime?
+  lastLoggedOut  DateTime?
+  // Soft delete. Every lookup on userName or mobileNumber MUST filter on
+  // this, or a deleted account becomes reachable again.
+  isDeleted      Boolean   @default(false)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  session       Session?
+  stats         UserStats?
+  guestSessions  GuestUser[]
+  participations GameParticipant[]
+  createdRooms  Room[]           @relation("RoomCreatorUser")
+
+  // Uniqueness is enforced by partial indexes (see migration SQL), NOT by
+  // @unique here — a deleted row must keep its number/name without blocking
+  // a new signup on the same ones.
+  @@index([mobileNumber])
+  @@index([userName])
+}
+
+model GuestUser {
+  id          String   @id @default(uuid())
+  // NULL until this guest signs up. Filled in once, never cleared, and NOT
+  // unique: the same person playing as a guest on two devices produces two
+  // rows that both point here, which is correct.
+  userId      String?
+  // The foreign key above (userId) is just a raw string column. This `user`
+  // field is the Prisma relation that turns it into an actual join, so
+  // `include: { user: true }` can populate the linked User row.
+  user        User?    @relation(fields: [userId], references: [id])
+  displayName String
+  // Random id from AsyncStorage, generated on first launch. Recognises a
+  // returning guest on this device.
+  guestToken  String   @unique
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  participations GameParticipant[]
+  createdRooms   Room[]            @relation("RoomCreatorGuest")
+
+  @@index([userId])
+}
+
+model Session {
+  id     String @id @default(uuid())
+  // 1:1 — one live session per user. Logging in elsewhere replaces this row,
+  // which is what "one device per login" means in practice.
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken String
+  // Only the HASH of the refresh token is stored. Storing the plaintext too
+  // would defeat the point: a leaked table would hand out working sessions.
+  // On refresh, hash what the client sent and look it up.
+  refreshTokenHash String
+  // Which physical device holds this session. Belongs here and not on User —
+  // it is a property of the session, and dies with it. Not unique: a shared
+  // tablet or a reinstall would collide.
+  deviceToken String?
+  createdAt   DateTime @default(now())
+}
+
+model Otp {
+  id           String    @id @default(uuid())
+  mobileNumber String    @unique
+  // Never store the raw code.
+  codeHash     String
+  expiresAt    DateTime
+  // Without this, a 6-digit code is brute-forceable in seconds.
+  attempts     Int       @default(0)
+  // Set on successful use, so one code cannot be replayed.
+  consumedAt   DateTime?
+  createdAt    DateTime  @default(now())
+}
+
+model UserStats {
+  id               String   @id @default(uuid())
+  // NOT NULL and unique: a stats row with no owner is numbers about nobody —
+  // unreadable, unupdatable, and it accumulates forever.
+  userId           String   @unique
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  totalGamesPlayed Int      @default(0)
+  totalWins        Int      @default(0)
+  totalLosses      Int      @default(0)
+  asMafia          Int      @default(0)
+  asDetective      Int      @default(0)
+  asDoctor         Int      @default(0)
+  asTownPeople     Int      @default(0)
+  isDeleted        Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model Room {
+  id           String    @id @default(uuid())
+  // Six characters, stored WITHOUT the display hyphen. The UI adds it.
+  code         String    @db.VarChar(6)
+  // Who created the room, in whichever identity they had at that moment.
+  // A guest host fills createdByGuestUserId; a logged-in host fills
+  // createdByUserId. Two real foreign keys instead of one id + role column,
+  // so Postgres can check each id actually exists. A CHECK constraint
+  // (migration SQL) makes sure at least one is set.
+  createdByGuestUserId String?
+  createdByGuestUser   GuestUser? @relation("RoomCreatorGuest", fields: [createdByGuestUserId], references: [id], onDelete: Restrict)
+  createdByUserId      String?
+  createdByUser        User?      @relation("RoomCreatorUser", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  // Null while the room is open. Set when it closes (e.g. the host leaves),
+  // which frees the code for reuse.
+  closedAt     DateTime?
+  createdAt    DateTime  @default(now())
+
+  // The role mix lives on each Game, not here, so editing the next game's
+  // mix can never touch a finished one. The current game is found from
+  // Game itself (its single non-GAME_OVER game), not stored as a pointer.
+  games        Game[]
+
+  @@index([closedAt])
+}
+
+// The one list of these values. Stored lowercase (decision record Q21);
+// src/game/enums/enums.ts adds uppercase keys on top (Role.MAFIA === "mafia"),
+// and app code imports from there, not from the generated client.
+enum Phase {
+  lobby
+  role_reveal
+  night
+  day
+  vote
+  game_over
+}
+
+enum Role {
+  mafia
+  detective
+  doctor
+  town
+}
+
+enum Team {
+  mafia
+  town
+}
+
+enum PlayerStatus {
+  alive
+  dead
+}
+
+// `winner` alone cannot describe an abort (nobody won), so the reason is
+// stored separately.
+enum GameEndReason {
+  mafia_eliminated
+  mafia_majority
+  aborted_attrition
+  aborted_host
+  // Nobody did anything for 30 minutes (everyone closed the app, or the
+  // server went down). Without this, such a game would block its room forever.
+  abandoned
+}
+
+// One match inside a room, from its lobby to game over. "Play again" adds a
+// new Game, so a finished game is never edited. The room's current game is
+// its single game whose phase is not GAME_OVER — a partial unique index
+// (migration SQL) allows at most one.
+model Game {
+  id        String         @id @default(uuid())
+  roomId    String
+  room      Room           @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  // 1 for the first game in this room, 2 after "play again", and so on.
+  sequence  Int
+  phase     Phase          @default(lobby)
+  // Round 1 is the first night.
+  round     Int            @default(1)
+
+  // The role mix. Editable by the host only while in LOBBY; a trigger
+  // (migration SQL) locks it once the game starts, so it always records
+  // what was actually dealt.
+  mafiaCount     Int
+  detectiveCount Int
+  doctorCount    Int
+  townCount      Int
+
+  winner    Team?
+  endReason GameEndReason?
+  // Lobby opened / "Begin the game" pressed / game over.
+  createdAt DateTime       @default(now())
+  startedAt DateTime?
+  endedAt   DateTime?
+  // Bumped by every write to this game (join, leave, mix edit, phase change,
+  // action, vote). A game idle for 30 minutes is ended as ABANDONED the next
+  // time anyone touches the room. Set explicitly, not @updatedAt, because
+  // joins and leaves write GameParticipant rows, not this one.
+  lastActivityAt DateTime  @default(now())
+
+  participants GameParticipant[]
+
+  // Two overlapping "play again" taps can't both become game #N.
+  @@unique([roomId, sequence])
+}
+
+// One person in one game: joining the lobby creates the row, "Begin the
+// game" fills in the role. Replaces the old room-level seat table, so each
+// game keeps its own exact cast list. Votes and night actions (later tasks)
+// point here.
+model GameParticipant {
+  id          String       @id @default(uuid())
+  gameId      String
+  game        Game         @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  // Set when joined as a guest. Never rewritten, so a game played as a
+  // guest always records that a guest played it.
+  guestUserId String?
+  guestUser   GuestUser?   @relation(fields: [guestUserId], references: [id], onDelete: Restrict)
+  // Set when joined while logged in, or backfilled once at signup
+  // (linkGuestToUser), so "all my games" is a single `where userId` query.
+  // A CHECK constraint (migration SQL) makes sure at least one id is set.
+  userId      String?
+  user        User?        @relation(fields: [userId], references: [id], onDelete: Restrict)
+  // No displayName/avatarColor here on purpose — identity is always shown
+  // live from GuestUser/User (2026-09-19 identity decision).
+  // Set once when the lobby is created; the host never changes. A partial
+  // unique index (migration SQL) allows one host per game.
+  isHost      Boolean      @default(false)
+  // Null in LOBBY; filled in for everyone when the game begins.
+  role        Role?
+  status      PlayerStatus @default(alive)
+  // Null while alive.
+  diedAtRound Int?
+  joinedAt    DateTime     @default(now())
+  // Null = still in. Only tracked until GAME_OVER.
+  leftAt      DateTime?
+
+  // One row per guest per game, and one per user per game — stops a
+  // double-join. Postgres treats NULLs as distinct, so a guest row never
+  // collides on the userId rule, and vice versa.
+  @@unique([gameId, guestUserId])
+  @@unique([gameId, userId])
+  // "All my games" lookups, and linkGuestToUser's backfill.
+  @@index([userId])
+  @@index([guestUserId])
+}

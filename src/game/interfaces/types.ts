@@ -4,6 +4,7 @@ import type {
   Phase,
   PlayerStatus,
   Role,
+  TargetStatus,
   Team,
 } from "../enums/enums";
 
@@ -23,8 +24,26 @@ export interface Player {
 /** A single role's action for a single night. */
 export interface NightAction {
   actorId: string;
-  targetId: string;
+  /** null for a SKIP — matches the nullable column the NightAction table will have. */
+  targetId: string | null;
   type: NightActionType;
+}
+
+/**
+ * What one night came to: each role's resolved decision, plus what happened
+ * to the mafia's target. The rules work it out and hand it back; the caller
+ * saves it. *Why* a field is null (split vote, skip, timer ran out) isn't
+ * repeated here — the NightAction rows already hold that.
+ */
+export interface NightOutcome {
+  /** null when the mafia reached no majority, or the majority stayed silent. */
+  mafiaTargetId: string | null;
+  /** "saved" when the doctor protected the mafia's target. null when there's no target. */
+  mafiaTargetStatus: TargetStatus | null;
+  /** null when the doctor didn't protect anyone. */
+  doctorProtectedId: string | null;
+  /** null when the detective skipped. Private — only the detective sees it. */
+  investigation: { targetId: string; isMafia: boolean } | null;
 }
 
 /**
