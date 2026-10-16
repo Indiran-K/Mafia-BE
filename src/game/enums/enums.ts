@@ -1,5 +1,6 @@
 import {
   GameEndReason as DbGameEndReason,
+  NightActionType as DbNightActionType,
   Phase as DbPhase,
   PlayerStatus as DbPlayerStatus,
   Role as DbRole,
@@ -73,13 +74,14 @@ export const GameEndReason = {
 } as const satisfies UppercaseKeysFor<DbGameEndReason>;
 export type GameEndReason = (typeof GameEndReason)[keyof typeof GameEndReason];
 
-/** What each acting role does during the night. */
-export enum NightActionType {
-  KILL = "kill",
-  INVESTIGATE = "investigate",
-  PROTECT = "protect",
-  SKIP = "skip",
-}
+/** What a night role confirmed. `SKIP` is an explicit "do nothing" (Q5). */
+export const NightActionType = {
+  KILL: DbNightActionType.kill,
+  INVESTIGATE: DbNightActionType.investigate,
+  PROTECT: DbNightActionType.protect,
+  SKIP: DbNightActionType.skip,
+} as const satisfies UppercaseKeysFor<DbNightActionType>;
+export type NightActionType = (typeof NightActionType)[keyof typeof NightActionType];
 
 /**
  * What happened to a targeted player once the action resolved. Generic on

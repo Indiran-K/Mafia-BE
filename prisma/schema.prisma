@@ -180,6 +180,15 @@ enum GameEndReason {
   abandoned
 }
 
+// What a night role confirmed. `skip` is an explicit "do nothing" (Q5); a
+// player who never confirms has no row at all.
+enum NightActionType {
+  kill
+  investigate
+  protect
+  skip
+}
+
 // One match inside a room, from its lobby to game over. "Play again" adds a
 // new Game, so a finished game is never edited. The room's current game is
 // its single game whose phase is not GAME_OVER — a partial unique index
@@ -215,6 +224,7 @@ model Game {
   lastActivityAt DateTime  @default(now())
 
   participants GameParticipant[]
+  nightActions NightAction[]
 
   // Two overlapping "play again" taps can't both become game #N.
   @@unique([roomId, sequence])
@@ -251,12 +261,45 @@ model GameParticipant {
   // Null = still in. Only tracked until GAME_OVER.
   leftAt      DateTime?
 
+  nightActionsTaken    NightAction[] @relation("NightActionActor")
+  nightActionsTargeted NightAction[] @relation("NightActionTarget")
+
   // One row per guest per game, and one per user per game — stops a
   // double-join. Postgres treats NULLs as distinct, so a guest row never
   // collides on the userId rule, and vice versa.
   @@unique([gameId, guestUserId])
   @@unique([gameId, userId])
+  // Lets NightAction point at (gameId, id), so an actor or target from
+  // another game is rejected by Postgres itself. `id` alone is already
+  // unique; this just gives the composite foreign keys something to reference.
+  @@unique([gameId, id])
   // "All my games" lookups, and linkGuestToUser's backfill.
   @@index([userId])
   @@index([guestUserId])
+}
+
+// One player's confirmed choice for one night (decision record 2026-10-11).
+// A confirm is final: one row per player per night, inserted once, never
+// updated (Q1). The night's result is never stored. It's computed from these
+// rows whenever it's needed (Q16).
+model NightAction {
+  id        String           @id @default(uuid())
+  gameId    String
+  game      Game             @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  // Which night: Game.round at the time of the confirm. Round 1 is the first night.
+  round     Int
+  // (gameId, actorId) and (gameId, targetId) point at GameParticipant
+  // (gameId, id), so both players must be in this same game (Q18).
+  actorId   String
+  actor     GameParticipant  @relation("NightActionActor", fields: [gameId, actorId], references: [gameId, id], onDelete: Cascade)
+  type      NightActionType
+  // Null only for a skip (CHECK in migration SQL).
+  targetId  String?
+  target    GameParticipant? @relation("NightActionTarget", fields: [gameId, targetId], references: [gameId, id], onDelete: Cascade)
+  createdAt DateTime         @default(now())
+
+  // One confirm per player per night (Q1).
+  @@unique([gameId, round, actorId])
+  // "All of tonight's actions", read when the night ends.
+  @@index([gameId, round])
 }
