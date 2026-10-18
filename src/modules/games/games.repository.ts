@@ -1,5 +1,6 @@
 import { GameEndReason, Phase, Role } from "../../game/enums/enums";
-import type { Game, GameParticipant, Prisma } from "../../generated/prisma/client";
+import type { Game, Prisma } from "../../generated/prisma/client";
+import type { GameWithParticipants } from "./games.interface";
 
 // Every function here only reads or writes rows, using the transaction the
 // service hands in. No decisions — the service owns the flow and the rules
@@ -23,7 +24,7 @@ export async function findRoomIdOfGame(
 export function findGameWithParticipants(
   tx: Prisma.TransactionClient,
   gameId: string,
-): Promise<Game & { participants: GameParticipant[] }> {
+): Promise<GameWithParticipants> {
   return tx.game.findUniqueOrThrow({
     where: { id: gameId },
     include: { participants: true },
@@ -74,5 +75,17 @@ export function markGameStarted(
   return tx.game.update({
     where: { id: gameId },
     data: { phase: Phase.ROLE_REVEAL, startedAt: now, lastActivityAt: now },
+  });
+}
+
+// The night begins. Round stays as it is: round 1 is the first night, and
+// later rounds are bumped when a day ends (Task 10).
+export function markNightStarted(
+  tx: Prisma.TransactionClient,
+  gameId: string,
+): Promise<Game> {
+  return tx.game.update({
+    where: { id: gameId },
+    data: { phase: Phase.NIGHT, lastActivityAt: new Date() },
   });
 }

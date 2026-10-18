@@ -1,5 +1,5 @@
-import type { Game } from "../../generated/prisma/client";
-import type { StartGameStatus } from "./games.enum";
+import type { Game, GameParticipant } from "../../generated/prisma/client";
+import type { StartGameStatus, StartNightStatus } from "./games.enum";
 
 // Who a participant (or a room's creator) is, already resolved by the
 // service. Maps one-to-one onto the two owner columns, so repositories
@@ -28,3 +28,13 @@ export type StartGameResult =
   // reason is validateRoleMix's own message, e.g. "Role mix assigns 5
   // roles but the room has 4 players." — shown to the host as-is.
   | { status: StartGameStatus.INVALID_ROLE_MIX; reason: string };
+
+// The game plus everyone who has ever joined it. What the night flows load
+// once the room lock is held.
+export type GameWithParticipants = Game & { participants: GameParticipant[] };
+
+// STARTED returns the bare Game row, like Begin: no participants, no roles.
+export type StartNightResult =
+  | { status: StartNightStatus.STARTED; game: Game }
+  | { status: StartNightStatus.GAME_NOT_FOUND }
+  | { status: StartNightStatus.NOT_IN_ROLE_REVEAL };

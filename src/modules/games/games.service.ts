@@ -5,17 +5,19 @@ import { Phase, Role } from "../../game/enums/enums";
 import { isGameIdle } from "../../game/lifecycle/lifecycle";
 import { assignRoles, validateRoleMix } from "../../game/roles/roles";
 import type { Game, GameParticipant } from "../../generated/prisma/client";
-import { StartGameStatus } from "./games.enum";
+import { StartGameStatus, StartNightStatus } from "./games.enum";
 import type {
   ParticipantOwner,
   StartGameInput,
   StartGameResult,
+  StartNightResult,
 } from "./games.interface";
 import {
   findGameWithParticipants,
   findRoomIdOfGame,
   markGameAbandoned,
   markGameStarted,
+  markNightStarted,
   saveParticipantRoles,
 } from "./games.repository";
 
@@ -106,4 +108,23 @@ function roleMixOf(
     [Role.DOCTOR]: game.doctorCount,
     [Role.TOWN]: game.townCount,
   };
+}
+
+// Role reveal → night (decision record 2026-10-11, Q10–Q12). No route: the
+// reveal timer calls this once Socket.io exists, and tests call it now.
+// Holds the room lock, so a timer firing twice still starts the night once.
+export async function startNight(gameId: string): Promise<StartNightResult> {
+  return runInTransaction(async (tx): Promise<StartNightResult> => {
+    const roomId = await findRoomIdOfGame(tx, gameId);
+    if (!roomId) return { status: StartNightStatus.GAME_NOT_FOUND };
+    if (!(await lockOpenRoomById(tx, roomId))) {
+      return { status: StartNightStatus.NOT_IN_ROLE_REVEAL };
+    }
+
+    const game = await findGameWithParticipants(tx, gameId);
+    if (game.phase !== Phase.ROLE_REVEAL) {
+      return { status: StartNightStatus.NOT_IN_ROLE_REVEAL };
+    }
+    return { status: StartNightStatus.STARTED, game: await markNightStarted(tx, gameId) };
+  });
 }

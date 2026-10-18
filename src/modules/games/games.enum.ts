@@ -9,3 +9,11 @@ export enum StartGameStatus {
   // playable (no mafia, mafia already equal the town).
   INVALID_ROLE_MIX = "invalid_role_mix",
 }
+
+/** The ways starting the night can end. Called by the reveal timer, not a route (Q12). */
+export enum StartNightStatus {
+  STARTED = "started",
+  GAME_NOT_FOUND = "game_not_found",
+  // Not in role reveal: still in the lobby, already at night, later, or over.
+  NOT_IN_ROLE_REVEAL = "not_in_role_reveal",
+}
