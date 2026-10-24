@@ -1,13 +1,10 @@
-/** The ways a join request can end. The controller maps each to an HTTP status. */
+/**
+ * The two ways a join succeeds. Every failure is thrown as an HttpException
+ * instead (decision record 2026-10-18 validation/errors/DTOs, Q4); these
+ * stay because they get different HTTP codes.
+ */
 export enum JoinRoomStatus {
-  JOINED = "joined",
+  JOINED = "joined", // 201
+  // Already in this game, e.g. reconnecting mid-game or a retry. 200.
   ALREADY_JOINED = "already_joined",
-  ROOM_FULL = "room_full",
-  ROOM_NOT_FOUND = "room_not_found",
-  // The room is open but its last game is over (or was just expired as
-  // abandoned) and the host hasn't pressed "Play again" yet.
-  NO_OPEN_GAME = "no_open_game",
-  // The current game has already begun. Only people already in it may
-  // reconnect; newcomers wait for the next game.
-  GAME_IN_PROGRESS = "game_in_progress",
 }

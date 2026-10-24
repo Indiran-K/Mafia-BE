@@ -10,6 +10,11 @@
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
 
+    // class-validator's @IsInt() etc. on request DTOs. emitDecoratorMetadata
+    // stays off: tsx/vitest (esbuild) can't emit it, and nested types are
+    // named with @Type(() => X) instead.
+    "experimentalDecorators": true,
+
     "verbatimModuleSyntax": true,
     "isolatedModules": true,
     "skipLibCheck": true,

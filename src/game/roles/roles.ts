@@ -1,23 +1,31 @@
 import { Role } from "../enums/enums";
 
+// The table sizes a game supports. Shared by the suggested mix and the
+// playable-mix check, so the two can't disagree.
+export const MIN_PLAYERS = 5;
+export const MAX_PLAYERS = 12;
+
+// Every game has exactly this many doctors and detectives (decision record
+// 2026-10-11, Q8). Shared by the suggested mix and the playable-mix check.
+export const DOCTOR_COUNT = 1;
+export const DETECTIVE_COUNT = 1;
+
 // The suggested mix for a table of this size: a third mafia, one detective,
 // one doctor, the rest town. A starting point the host can edit, not a rule
 // the game enforces — validateRoleMix is what decides a mix is playable.
 export function defaultCount(numPlayers: number) {
-  const minPlayers = 5;
-  const maxPlayers = 12;
   let mafiaCount;
   let doctorCount;
   let detectiveCount;
   let villagersCount;
-  if (numPlayers < minPlayers) {
+  if (numPlayers < MIN_PLAYERS) {
     throw new Error("Not enough players to assign roles.");
-  } else if (numPlayers > maxPlayers) {
+  } else if (numPlayers > MAX_PLAYERS) {
     throw new Error("Too many players to assign roles.");
   } else {
     mafiaCount = Math.floor(numPlayers / 3);
-    doctorCount = 1;
-    detectiveCount = 1;
+    doctorCount = DOCTOR_COUNT;
+    detectiveCount = DETECTIVE_COUNT;
     villagersCount = numPlayers - mafiaCount - doctorCount - detectiveCount;
   }
 
@@ -29,8 +37,12 @@ export function defaultCount(numPlayers: number) {
   };
 }
 
-// Lets the host's Role Mix editor screen know whether a custom role
-// configuration is safe to save, before the game ever starts.
+// Whether a mix is playable for this many players. Used when a room is
+// created (the mix sets the room's size) and again at Begin (the mix must
+// match who is present). Checks, in order: the counts add up to the
+// players; 5–12 players; exactly one doctor and one detective (decision
+// record 2026-10-11 Q8); at least one mafia, and fewer mafia than everyone
+// else. The reason is shown to the host as-is.
 export function validateRoleMix(
   config: Record<Role, number>,
   totalPlayers: number,
@@ -45,6 +57,21 @@ export function validateRoleMix(
       reason: `Role mix assigns ${totalAssignedRoles} roles but the room has ${totalPlayers} players.`,
     };
   }
+  if (totalPlayers < MIN_PLAYERS || totalPlayers > MAX_PLAYERS) {
+    return {
+      valid: false,
+      reason: `A game needs ${MIN_PLAYERS} to ${MAX_PLAYERS} players.`,
+    };
+  }
+  if (
+    config[Role.DOCTOR] !== DOCTOR_COUNT ||
+    config[Role.DETECTIVE] !== DETECTIVE_COUNT
+  ) {
+    return {
+      valid: false,
+      reason: "A game needs exactly one doctor and one detective.",
+    };
+  }
   if (config[Role.MAFIA] < 1) {
     return { valid: false, reason: "At least one Mafia is required." };
   }
@@ -54,6 +81,13 @@ export function validateRoleMix(
       valid: false,
       reason:
         "The mafia already equal the town — they win on night one. Drop to fewer mafia or add seats.",
+    };
+  }
+  const MafiaCount = Math.round(totalPlayers / 4);
+  if (config[Role.MAFIA] > MafiaCount) {
+    return {
+      valid: false,
+      reason: `Too many mafia for the number of players. It should be equal to ${MafiaCount}.`,
     };
   }
   return { valid: true, reason: null };

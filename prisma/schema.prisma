@@ -211,6 +211,14 @@ model Game {
   doctorCount    Int
   townCount      Int
 
+  // How long each day and night lasts, for the timers (decision record
+  // 2026-10-18, Q4–Q6). Per game, like the mix, so "play again" can change
+  // them without touching a finished game. The host picks the day length
+  // (60/120/180, CHECK in migration SQL); the night is fixed at 90 for now
+  // but stored, so it can become configurable later.
+  dayLengthInSeconds   Int
+  nightLengthInSeconds Int @default(90)
+
   winner    Team?
   endReason GameEndReason?
   // Lobby opened / "Begin the game" pressed / game over.

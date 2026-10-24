@@ -1,19 +1,19 @@
-/** The ways a "Begin the game" request can end. The controller maps each to an HTTP status. */
-export enum StartGameStatus {
-  STARTED = "started",
-  GAME_NOT_FOUND = "game_not_found",
-  // Already begun, already over, or just expired as abandoned.
-  NOT_IN_LOBBY = "not_in_lobby",
-  NOT_HOST = "not_host",
-  // The present player count doesn't fit the mix, or the mix itself isn't
-  // playable (no mafia, mafia already equal the town).
-  INVALID_ROLE_MIX = "invalid_role_mix",
+/**
+ * What a transaction returns instead of throwing when it has just saved a
+ * game as ABANDONED (decision record 2026-10-18 validation/errors/DTOs, Q7).
+ * A throw inside the transaction would roll that save back, so the service
+ * throws "Game was abandoned." only after the commit. Used by join and Begin.
+ */
+export enum LobbyExpiry {
+  GAME_ABANDONED = "game_abandoned",
 }
 
-/** The ways starting the night can end. Called by the reveal timer, not a route (Q12). */
-export enum StartNightStatus {
-  STARTED = "started",
-  GAME_NOT_FOUND = "game_not_found",
-  // Not in role reveal: still in the lobby, already at night, later, or over.
-  NOT_IN_ROLE_REVEAL = "not_in_role_reveal",
+/**
+ * The two successes of a night confirm. Every failure is thrown by the
+ * service as an HttpException, so the controller only tells these apart.
+ */
+export enum SubmitNightActionStatus {
+  RECORDED = "recorded", // 201
+  // The exact same confirm again, e.g. a retry on a bad network (Q1). 200.
+  ALREADY_RECORDED = "already_recorded",
 }

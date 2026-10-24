@@ -4,8 +4,8 @@ import type { Prisma, Room } from "../../generated/prisma/client";
 import type { ParticipantOwner } from "../games/games.interface";
 import type {
   GameWithParticipants,
+  RoomSetup,
   RoomWithCurrentGame,
-  StartingRoleMix,
 } from "./rooms.interface";
 
 // Every function here only reads or writes rows. No decisions — the service
@@ -44,11 +44,12 @@ export async function isRoomCodeInUse(code: string): Promise<boolean> {
 // Creates the room, its first game's lobby, and the host's participant row
 // in one nested write — Prisma runs it as a single transaction, so a room
 // never exists without an open lobby and its host already in it. The same
-// owner is both the room's creator and the game's host.
+// owner is both the room's creator and the game's host. The setup's fields
+// are Game columns (mix + day length), so it's spread onto the game as-is.
 export async function insertRoomWithFirstGame(
   code: string,
   host: ParticipantOwner,
-  roleMix: StartingRoleMix,
+  setup: RoomSetup,
 ): Promise<RoomWithCurrentGame> {
   const room = await prisma.room.create({
     data: {
@@ -58,7 +59,7 @@ export async function insertRoomWithFirstGame(
       games: {
         create: {
           sequence: 1,
-          ...roleMix,
+          ...setup,
           participants: {
             create: {
               guestUserId: host.guestUserId,

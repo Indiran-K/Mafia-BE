@@ -6,6 +6,13 @@
 // BASE is where each module's router is mounted (index.ts). Every other path
 // is relative to it, so the base is written exactly once. Bases are singular
 // (/room, /game) by the user's choice.
+// The Welcome screen's Continue: creates the guest and hands back its token
+// (decision record 2026-10-18, Q2).
+export const GUEST_ROUTES = {
+  BASE: "/guest",
+  CREATE: "/",
+} as const;
+
 export const ROOM_ROUTES = {
   BASE: "/room",
   CREATE: "/",
@@ -18,4 +25,6 @@ export const ROOM_ROUTES = {
 export const GAME_ROUTES = {
   BASE: "/game",
   START: "/:gameId/start",
+  // One night confirm (decision record 2026-10-11).
+  NIGHT_ACTION: "/:gameId/night-action",
 } as const;

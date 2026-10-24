@@ -1,5 +1,86 @@
 import { NightActionType, PlayerStatus, Role, TargetStatus } from "../enums/enums";
-import type { NightAction, NightOutcome, Player } from "../interfaces/types";
+import type { NightAction, NightOutcome, NightPlayer, Player } from "../interfaces/types";
+
+// Which action types each role may confirm at night. Town has none, so town
+// never acts and is never waited for. Every night role may also skip (Q5).
+const ACTIONS_BY_ROLE: Record<Role, readonly NightActionType[]> = {
+  [Role.MAFIA]: [NightActionType.KILL, NightActionType.SKIP],
+  [Role.DOCTOR]: [NightActionType.PROTECT, NightActionType.SKIP],
+  [Role.DETECTIVE]: [NightActionType.INVESTIGATE, NightActionType.SKIP],
+  [Role.TOWN]: [],
+};
+
+// Why a confirm was refused, so the service can pick the HTTP status:
+// ACTION_NOT_ALLOWED → 403 (wrong role), INVALID_TARGET → 400 (bad target).
+export enum NightActionVerdict {
+  OK = "ok",
+  ACTION_NOT_ALLOWED = "action_not_allowed",
+  INVALID_TARGET = "invalid_target",
+}
+
+// The detective's answer, and the one place that says what "is mafia" means.
+// Takes a nullable role so a database row's target can be passed straight in.
+export function isMafia(player: { role: Role | null }): boolean {
+  return player.role === Role.MAFIA;
+}
+
+// Checks 6–8 of the submit order (decision record 2026-10-11, Q2): the
+// action fits the actor's role, the target is a living player in this game,
+// and the role's own target rules hold (Q3 mafia never target mafia; the
+// detective never targets themselves; the doctor may protect anyone, Q4).
+// Checks 1–5 and 9 need the database, so the service does them.
+export function validateNightAction(
+  players: NightPlayer[],
+  action: NightAction,
+): NightActionVerdict {
+  const actor = players.find((player) => player.id === action.actorId);
+  if (!actor || !ACTIONS_BY_ROLE[actor.role].includes(action.type)) {
+    return NightActionVerdict.ACTION_NOT_ALLOWED;
+  }
+
+  if (action.type === NightActionType.SKIP) {
+    return action.targetId === null ? NightActionVerdict.OK : NightActionVerdict.INVALID_TARGET;
+  }
+
+  const target = players.find((player) => player.id === action.targetId);
+  if (!target || target.status !== PlayerStatus.ALIVE) {
+    return NightActionVerdict.INVALID_TARGET;
+  }
+  if (isMafia(actor) && isMafia(target)) return NightActionVerdict.INVALID_TARGET;
+  if (actor.role === Role.DETECTIVE && target.id === actor.id) {
+    return NightActionVerdict.INVALID_TARGET;
+  }
+  return NightActionVerdict.OK;
+}
+
+// Who was in the game, and alive, on night `round`. A player counts as alive
+// on every night up to and including the round they died (they died that
+// night, or on a later day). So recomputing an old night still counts a
+// mafia who was voted out afterwards (Q16). Anyone never dealt a role (left
+// the lobby before Begin) isn't part of the game at all.
+export function playersOnNight(
+  participants: {
+    id: string;
+    role: Role | null;
+    status: PlayerStatus;
+    diedAtRound: number | null;
+  }[],
+  round: number,
+): NightPlayer[] {
+  const players: NightPlayer[] = [];
+  for (const participant of participants) {
+    if (participant.role === null) continue;
+    const aliveOnNight =
+      participant.status === PlayerStatus.ALIVE ||
+      (participant.diedAtRound !== null && participant.diedAtRound >= round);
+    players.push({
+      id: participant.id,
+      role: participant.role,
+      status: aliveOnNight ? PlayerStatus.ALIVE : PlayerStatus.DEAD,
+    });
+  }
+  return players;
+}
 
 // Resolves one role's actions for the night and hands back that role's
 // target. Town has no night action, so it never has a target.

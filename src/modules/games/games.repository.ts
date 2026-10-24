@@ -1,5 +1,10 @@
 import { GameEndReason, Phase, Role } from "../../game/enums/enums";
-import type { Game, Prisma } from "../../generated/prisma/client";
+import type { NightAction } from "../../game/interfaces/types";
+import type {
+  Game,
+  NightAction as NightActionRow,
+  Prisma,
+} from "../../generated/prisma/client";
 import type { GameWithParticipants } from "./games.interface";
 
 // Every function here only reads or writes rows, using the transaction the
@@ -87,5 +92,46 @@ export function markNightStarted(
   return tx.game.update({
     where: { id: gameId },
     data: { phase: Phase.NIGHT, lastActivityAt: new Date() },
+  });
+}
+
+// This player's confirm for this night, if they've already sent one.
+export function findNightAction(
+  tx: Prisma.TransactionClient,
+  gameId: string,
+  round: number,
+  actorId: string,
+): Promise<NightActionRow | null> {
+  return tx.nightAction.findUnique({
+    where: { gameId_round_actorId: { gameId, round, actorId } },
+  });
+}
+
+// Stores one confirm. Never updated afterwards: a confirm is final (Q1).
+export async function insertNightAction(
+  tx: Prisma.TransactionClient,
+  gameId: string,
+  round: number,
+  action: NightAction,
+): Promise<void> {
+  await tx.nightAction.create({
+    data: {
+      gameId,
+      round,
+      actorId: action.actorId,
+      type: action.type,
+      targetId: action.targetId,
+    },
+  });
+}
+
+// Records that something happened in this game, so the idle clock restarts.
+export async function touchGame(
+  tx: Prisma.TransactionClient,
+  gameId: string,
+): Promise<void> {
+  await tx.game.update({
+    where: { id: gameId },
+    data: { lastActivityAt: new Date() },
   });
 }

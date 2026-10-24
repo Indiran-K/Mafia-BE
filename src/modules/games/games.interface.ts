@@ -1,5 +1,6 @@
+import type { NightActionType } from "../../game/enums/enums";
 import type { Game, GameParticipant } from "../../generated/prisma/client";
-import type { StartGameStatus, StartNightStatus } from "./games.enum";
+import type { SubmitNightActionStatus } from "./games.enum";
 
 // Who a participant (or a room's creator) is, already resolved by the
 // service. Maps one-to-one onto the two owner columns, so repositories
@@ -16,25 +17,23 @@ export interface StartGameInput {
   guestToken: string;
 }
 
-// STARTED returns the bare Game row — phase, startedAt — and deliberately
-// no participants: their rows now hold everyone's secret role, and this
-// response goes to the host. Each player learns only their own role from
-// the per-player view at Role Reveal.
-export type StartGameResult =
-  | { status: StartGameStatus.STARTED; game: Game }
-  | { status: StartGameStatus.GAME_NOT_FOUND }
-  | { status: StartGameStatus.NOT_IN_LOBBY }
-  | { status: StartGameStatus.NOT_HOST }
-  // reason is validateRoleMix's own message, e.g. "Role mix assigns 5
-  // roles but the room has 4 players." — shown to the host as-is.
-  | { status: StartGameStatus.INVALID_ROLE_MIX; reason: string };
-
 // The game plus everyone who has ever joined it. What the night flows load
 // once the room lock is held.
 export type GameWithParticipants = Game & { participants: GameParticipant[] };
 
-// STARTED returns the bare Game row, like Begin: no participants, no roles.
-export type StartNightResult =
-  | { status: StartNightStatus.STARTED; game: Game }
-  | { status: StartNightStatus.GAME_NOT_FOUND }
-  | { status: StartNightStatus.NOT_IN_ROLE_REVEAL };
+export interface SubmitNightActionInput {
+  gameId: string;
+  guestToken: string;
+  // Which night the phone is acting in (Q2 check 3).
+  round: number;
+  type: NightActionType;
+  // null only for a skip.
+  targetId: string | null;
+}
+
+// isMafia is the detective's answer (Q15), null for every other action.
+// nightEnded tells a later caller (the Socket.io layer) that this confirm
+// was the last one and the day has begun. It isn't sent to the phone.
+export type SubmitNightActionResult =
+  | { status: SubmitNightActionStatus.RECORDED; isMafia: boolean | null; nightEnded: boolean }
+  | { status: SubmitNightActionStatus.ALREADY_RECORDED; isMafia: boolean | null };

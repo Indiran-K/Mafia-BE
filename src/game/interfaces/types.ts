@@ -21,6 +21,12 @@ export interface Player {
   joinedAt: number;
 }
 
+/**
+ * The only parts of a player the night rules read. GameParticipant rows and
+ * full in-memory Players both fit, so the rules work on either.
+ */
+export type NightPlayer = Pick<Player, "id" | "role" | "status">;
+
 /** A single role's action for a single night. */
 export interface NightAction {
   actorId: string;
