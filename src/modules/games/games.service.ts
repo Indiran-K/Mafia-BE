@@ -9,7 +9,7 @@ import {
   Role,
 } from "../../game/enums/enums";
 import type { NightAction } from "../../game/interfaces/types";
-import { isGameIdle } from "../../game/lifecycle/lifecycle";
+import { deadlineAfter, isGameIdle } from "../../game/lifecycle/lifecycle";
 import {
   NightActionVerdict,
   isMafia,
@@ -191,6 +191,7 @@ export function roleMixOf(
 // Role reveal → night (decision record 2026-10-11, Q10–Q12). No route: the
 // reveal timer calls this once Socket.io exists, and tests call it now.
 // Holds the room lock, so a timer firing twice still starts the night once.
+// Sets the night's deadline (2026-10-24 Q6).
 // Throws an HttpException when there is nothing to start.
 export async function startNight(gameId: string): Promise<Game> {
   return runInTransaction(async (tx): Promise<Game> => {
@@ -200,7 +201,8 @@ export async function startNight(gameId: string): Promise<Game> {
 
     const game = await findGameWithParticipants(tx, gameId);
     if (game.phase !== Phase.ROLE_REVEAL) throw nightAlreadyStartedError();
-    return markNightStarted(tx, gameId);
+    const nightEndsAt = deadlineAfter(new Date(), game.nightLengthInSeconds);
+    return markNightStarted(tx, gameId, nightEndsAt);
   });
 }
 

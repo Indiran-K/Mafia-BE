@@ -4,6 +4,7 @@ import {
   Phase as DbPhase,
   PlayerStatus as DbPlayerStatus,
   Role as DbRole,
+  TargetStatus as DbTargetStatus,
   Team as DbTeam,
 } from "../../generated/prisma/enums";
 
@@ -88,10 +89,11 @@ export type NightActionType = (typeof NightActionType)[keyof typeof NightActionT
  * purpose: today only the mafia's target uses it, but a future role that
  * attacks (e.g. a vigilante) reuses the same values.
  */
-export enum TargetStatus {
-  KILLED = "killed",
-  SAVED = "saved",
-}
+export const TargetStatus = {
+  KILLED: DbTargetStatus.killed,
+  SAVED: DbTargetStatus.saved,
+} as const satisfies UppercaseKeysFor<DbTargetStatus>;
+export type TargetStatus = (typeof TargetStatus)[keyof typeof TargetStatus];
 
 export enum ConnectionStatus {
   ONLINE = "online",

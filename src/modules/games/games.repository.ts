@@ -83,15 +83,17 @@ export function markGameStarted(
   });
 }
 
-// The night begins. Round stays as it is: round 1 is the first night, and
-// later rounds are bumped when a day ends (Task 10).
+// The night begins, with its deadline. Round stays as it is: round 1 is the
+// first night, and later rounds are bumped when a day ends (Task 10). The
+// service works out phaseEndsAt; the repository only writes it.
 export function markNightStarted(
   tx: Prisma.TransactionClient,
   gameId: string,
+  phaseEndsAt: Date,
 ): Promise<Game> {
   return tx.game.update({
     where: { id: gameId },
-    data: { phase: Phase.NIGHT, lastActivityAt: new Date() },
+    data: { phase: Phase.NIGHT, phaseEndsAt, lastActivityAt: new Date() },
   });
 }
 

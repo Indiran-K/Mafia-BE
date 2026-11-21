@@ -189,6 +189,12 @@ enum NightActionType {
   skip
 }
 
+// What happened to the mafia's target (decision record 2026-10-24).
+enum TargetStatus {
+  killed
+  saved
+}
+
 // One match inside a room, from its lobby to game over. "Play again" adds a
 // new Game, so a finished game is never edited. The room's current game is
 // its single game whose phase is not GAME_OVER — a partial unique index
@@ -230,9 +236,15 @@ model Game {
   // time anyone touches the room. Set explicitly, not @updatedAt, because
   // joins and leaves write GameParticipant rows, not this one.
   lastActivityAt DateTime  @default(now())
+  // When the current phase ends (decision record 2026-10-24, Q5–Q6).
+  // Overwritten at every phase change. Null when the phase has no timer:
+  // lobby, game_over, and for now role_reveal and vote. A CHECK (migration
+  // SQL) requires it whenever the phase is night or day.
+  phaseEndsAt    DateTime?
 
   participants GameParticipant[]
   nightActions NightAction[]
+  rounds       GameRound[]
 
   // Two overlapping "play again" taps can't both become game #N.
   @@unique([roomId, sequence])
@@ -271,6 +283,11 @@ model GameParticipant {
 
   nightActionsTaken    NightAction[] @relation("NightActionActor")
   nightActionsTargeted NightAction[] @relation("NightActionTarget")
+  // The rounds where this player was the mafia's target, the doctor's pick,
+  // or the detective's check.
+  roundsAsMafiaTarget     GameRound[] @relation("GameRoundMafiaTarget")
+  roundsAsDoctorProtected GameRound[] @relation("GameRoundDoctorProtected")
+  roundsAsDetectiveTarget GameRound[] @relation("GameRoundDetectiveTarget")
 
   // One row per guest per game, and one per user per game — stops a
   // double-join. Postgres treats NULLs as distinct, so a guest row never
@@ -288,8 +305,8 @@ model GameParticipant {
 
 // One player's confirmed choice for one night (decision record 2026-10-11).
 // A confirm is final: one row per player per night, inserted once, never
-// updated (Q1). The night's result is never stored. It's computed from these
-// rows whenever it's needed (Q16).
+// updated (Q1). The night's result is stored once in GameRound when the
+// night ends (decision record 2026-10-24, reverses Q16).
 model NightAction {
   id        String           @id @default(uuid())
   gameId    String
@@ -310,4 +327,35 @@ model NightAction {
   @@unique([gameId, round, actorId])
   // "All of tonight's actions", read when the night ends.
   @@index([gameId, round])
+}
+
+// One round's results, each written once and never changed (decision record
+// 2026-10-24, Q7–Q10, Q13). endNight inserts the row with the night's result;
+// the vote task adds the day's columns later. What players chose stays in
+// NightAction; this is what the game decided from it, so one row shows the
+// whole night.
+model GameRound {
+  id                String           @id @default(uuid())
+  gameId            String
+  game              Game             @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  round             Int
+  // The three player columns point at GameParticipant (gameId, id) with
+  // composite foreign keys, so each must be a player in this same game.
+  // Who the mafia attacked. Null when they reached no majority or stayed silent.
+  mafiaTargetId     String?
+  mafiaTarget       GameParticipant? @relation("GameRoundMafiaTarget", fields: [gameId, mafiaTargetId], references: [gameId, id], onDelete: Cascade)
+  // Set exactly when there is a target (CHECK in migration SQL).
+  mafiaTargetStatus TargetStatus?
+  // Null when the doctor skipped or didn't act.
+  doctorProtectedId String?
+  doctorProtected   GameParticipant? @relation("GameRoundDoctorProtected", fields: [gameId, doctorProtectedId], references: [gameId, id], onDelete: Cascade)
+  // Who the detective checked (Q13). Null when they skipped or didn't act.
+  // The answer isn't stored: it's the target's role, which never changes.
+  detectiveTargetId String?
+  detectiveTarget   GameParticipant? @relation("GameRoundDetectiveTarget", fields: [gameId, detectiveTargetId], references: [gameId, id], onDelete: Cascade)
+  // When the night was resolved.
+  createdAt         DateTime         @default(now())
+
+  // One row per round. "Is this night's result ready?" = "does the row exist?".
+  @@unique([gameId, round])
 }

@@ -31,3 +31,10 @@ export function isGameIdle(
   const idleForMs = now.getTime() - game.lastActivityAt.getTime();
   return idleForMs >= GAME_IDLE_TIMEOUT_MS;
 }
+
+// The one place a phase length turns into a deadline (decision record
+// 2026-10-24, Q6): the night now, the day in Task 6. Pure so a test can pass
+// a fixed start time and check the exact result.
+export function deadlineAfter(start: Date, lengthInSeconds: number): Date {
+  return new Date(start.getTime() + lengthInSeconds * 1000);
+}
